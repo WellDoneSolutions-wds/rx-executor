@@ -401,7 +401,6 @@ export class RxConcurrentExecutor<P = void, D = any> {
       )
       .pipe(
         tap((execution: Execution<P, D>) => {
-          config!.onExecutionChange && config!.onExecutionChange(execution);
           execution.state.status === "WAITING" &&
             config!.onQueuing &&
             config!.onQueuing(execution.params, execution.key, execution);
@@ -424,6 +423,10 @@ export class RxConcurrentExecutor<P = void, D = any> {
               execution.key,
               execution
             );
+        }),
+        delay(1),
+        tap((execution) => {
+          config!.onExecutionChange && config!.onExecutionChange(execution);
         })
       );
   }
