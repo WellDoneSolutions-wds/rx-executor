@@ -14,6 +14,7 @@ export class RxExecutor<P = void, D = any> {
       getKey: () => this.key,
     });
     this.execute = this.execute.bind(this);
+    this.retry = this.retry.bind(this);
   }
 
   static create<P, D>(
