@@ -15,6 +15,7 @@ export class RxExecutor<P = void, D = any> {
     });
     this.execute = this.execute.bind(this);
     this.retry = this.retry.bind(this);
+    this.setData = this.setData.bind(this);
   }
 
   static create<P, D>(
@@ -65,5 +66,9 @@ export class RxExecutor<P = void, D = any> {
 
   retry() {
     this.concurrentExecutor.retry(this.key);
+  }
+
+  setData(data: D | ((prev: D) => D)) {
+    this.concurrentExecutor.setData(this.key, data);
   }
 }

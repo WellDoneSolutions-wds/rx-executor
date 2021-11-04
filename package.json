@@ -1,6 +1,6 @@
 {
   "name": "rx-executor",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Encapsulate all the boilerplate code necesary to execute an async operation. Support concurrency executions: MergeMap, SwitchMap, ConcatMap, ExhaustMap. Also a retry mechanisim. All  described is posible via configuration. Based on rxjs. This library can be used in any js environment.",
   "main": "./lib/index.js",
   "types": "./es/index.d.ts",

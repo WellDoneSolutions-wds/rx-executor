@@ -65,7 +65,16 @@ export class Execution<P, D> implements IExecution<P, D> {
   onCanceledTime?: Date;
   _errors: any[] = [];
   index: number = -1;
-  constructor(public key: string) {}
+
+  constructor(public key: string) {
+    this.setWaiting = this.setWaiting.bind(this);
+    this.setCanceled = this.setCanceled.bind(this);
+    this.setProcessing = this.setProcessing.bind(this);
+    this.setSuccess = this.setSuccess.bind(this);
+    this.setError = this.setError.bind(this);
+    this.setData = this.setData.bind(this);
+    this.addError = this.addError.bind(this);
+  }
 
   setWaiting(params: P, index: number) {
     this.params = params;
@@ -140,7 +149,6 @@ export class Execution<P, D> implements IExecution<P, D> {
   get status() {
     return this.state.status;
   }
-
   addError(error: any) {
     this.errors.unshift(error);
   }
@@ -148,8 +156,7 @@ export class Execution<P, D> implements IExecution<P, D> {
 
 export class RxConcurrentExecutor<P = void, D = any> {
   execute(params: P) {
-    const config = this.config ? this.config : {};
-    const getKey = config.getKey;
+    const getKey = this.config.getKey;
     const key = getKey ? getKey(params) : generateUUID();
     const execution = new Execution<P, D>(key);
     //TODO: asyncLock
@@ -224,12 +231,17 @@ export class RxConcurrentExecutor<P = void, D = any> {
     return this.execute(execution.params);
   }
 
-  setData(key: string, data: D) {
+  setData(key: string, data: D | ((prev: D) => D)) {
     const execution = this._executions[key];
     if (!execution) {
       return;
     }
-    return execution.setData(data);
+    let newData = data as D;
+    if (typeof data === "function") {
+      newData = (data as any)(execution.state.data!);
+    }
+    execution.setData(newData);
+    this.config.onExecutionChange && this.config.onExecutionChange(execution);
   }
 
   getExecution(key: string) {
@@ -253,10 +265,13 @@ export class RxConcurrentExecutor<P = void, D = any> {
     return new RxConcurrentExecutor<P, D>(executeFn$, config);
   }
 
+  protected config: IRxExecutorConfig<P, D>;
+
   constructor(
     protected executeFn$: IRxExecuteFn<P, D>,
-    protected config?: IRxExecutorConfig<P, D>
+    config?: IRxExecutorConfig<P, D>
   ) {
+    this.config = config || {};
     this.isLoading = this.isLoading.bind(this);
     this.execute = this.execute.bind(this);
     this.retry = this.retry.bind(this);
@@ -269,18 +284,14 @@ export class RxConcurrentExecutor<P = void, D = any> {
     this.setData = this.setData.bind(this);
     this.getExecution = this.getExecution.bind(this);
 
-    this.config = config ? config : {};
     const effectiveDestroy$ = this.config.destroy$
       ? merge(this.config.destroy$, this.internalDestroy$)
       : this.internalDestroy$;
-    const internalConfig: IRxExecutorConfig<P, D> = this.config
-      ? this.config
-      : {};
-    const execute$ = internalConfig.source$
+    const execute$ = this.config.source$
       ? merge(
-          internalConfig.source$.pipe(
+          this.config.source$.pipe(
             map((params): { key: string; params: P } => {
-              const getKey = this.config!.getKey;
+              const getKey = this.config.getKey;
               const key = getKey ? getKey(params) : generateUUID();
               return { key, params };
             }),
@@ -295,7 +306,7 @@ export class RxConcurrentExecutor<P = void, D = any> {
         )
       : this.execute$;
 
-    const asyncOperation = getTypeOperation(internalConfig.processingType!);
+    const asyncOperation = getTypeOperation(this.config.processingType!);
     this.execution$ = execute$
       .pipe(
         takeUntil(effectiveDestroy$),
@@ -306,11 +317,11 @@ export class RxConcurrentExecutor<P = void, D = any> {
             !!Object.keys(this.executions)
               .map((key) => this.executions[key])
               .find((execution) => execution.state.status === "PROCESSING") &&
-            this.config!.processingType === "EXHAUST"
+            this.config.processingType === "EXHAUST"
           ) {
             execution.setCanceled(execute.key);
           }
-          if (this.config!.processingType === "SWITCH") {
+          if (this.config.processingType === "SWITCH") {
             Object.keys(this.executions)
               .map((key) => this.executions[key])
               .filter((execution) => execution.state.status === "PROCESSING")
@@ -318,13 +329,15 @@ export class RxConcurrentExecutor<P = void, D = any> {
                 execution.setCanceled(execute.key);
               });
           }
-          config!.onExecutionChange && config!.onExecutionChange(execution);
+          this.config.onExecutionChange &&
+            this.config.onExecutionChange(execution);
           return execution;
         }),
         tap((execution) => {
-          config!.onQueuing &&
-            config!.onQueuing(execution.params, execution.key, execution);
-          config!.onExecutionChange && config!.onExecutionChange(execution);
+          this.config.onQueuing &&
+            this.config.onQueuing(execution.params, execution.key, execution);
+          this.config.onExecutionChange &&
+            this.config.onExecutionChange(execution);
         }),
         asyncOperation((execution) => {
           const params = execution.params;
@@ -339,8 +352,8 @@ export class RxConcurrentExecutor<P = void, D = any> {
           execution.setProcessing();
           this._executions[execution.key] = execution;
 
-          const retryConfig: IRetryProcessing = internalConfig.retry
-            ? internalConfig.retry
+          const retryConfig: IRetryProcessing = this.config.retry
+            ? this.config.retry
             : {
                 interval: 1000,
                 maxRetryAttempts: 0,
@@ -402,22 +415,26 @@ export class RxConcurrentExecutor<P = void, D = any> {
       .pipe(
         tap((execution: Execution<P, D>) => {
           execution.state.status === "WAITING" &&
-            config!.onQueuing &&
-            config!.onQueuing(execution.params, execution.key, execution);
+            this.config.onQueuing &&
+            this.config.onQueuing(execution.params, execution.key, execution);
           execution.state.status === "PROCESSING" &&
-            config!.onProcessing &&
-            config!.onProcessing(execution.params, execution.key, execution);
+            this.config.onProcessing &&
+            this.config.onProcessing(
+              execution.params,
+              execution.key,
+              execution
+            );
           execution.state.status === "SUCCESS" &&
-            config!.onSuccess &&
-            config!.onSuccess(
+            this.config.onSuccess &&
+            this.config.onSuccess(
               execution.state.data!,
               execution.params,
               execution.key,
               execution
             );
           execution.state.status === "ERROR" &&
-            config!.onError &&
-            config!.onError(
+            this.config.onError &&
+            this.config.onError(
               execution.state.error,
               execution.params,
               execution.key,
@@ -426,7 +443,8 @@ export class RxConcurrentExecutor<P = void, D = any> {
         }),
         delay(1),
         tap((execution) => {
-          config!.onExecutionChange && config!.onExecutionChange(execution);
+          this.config.onExecutionChange &&
+            this.config.onExecutionChange(execution);
         })
       );
   }
