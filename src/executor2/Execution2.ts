@@ -409,7 +409,7 @@ export class RxExecutor2<P, D> {
             const key = hash(params);
             const data = this.cachedData[key];
             if (data !== undefined) {
-              execution.succeed({ ...data, cached: true });
+              execution.succeed(data);
               return of(execution);
             }
           }
