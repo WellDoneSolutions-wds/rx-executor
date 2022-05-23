@@ -460,14 +460,21 @@ export class RxExecutor2<P, D> {
                 execution.succeed(resp);
                 return execution.state;
               }),
-              tap((execution) => {
-                this.processingExecutions = this.processingExecutions.filter(
-                  (e) => e !== execution
-                );
-                if (this.enableCache) {
-                  this.cachedData[execution.hashedParams!] = execution.data!;
+              tap(
+                (execution) => {
+                  this.processingExecutions = this.processingExecutions.filter(
+                    (e) => e !== execution
+                  );
+                  if (this.enableCache) {
+                    this.cachedData[execution.hashedParams!] = execution.data!;
+                  }
+                },
+                () => {
+                  this.processingExecutions = this.processingExecutions.filter(
+                    (e) => e !== execution
+                  );
                 }
-              }),
+              ),
               catchError((error) => {
                 execution.failed(error);
                 return of(execution.state);
