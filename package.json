@@ -1,6 +1,6 @@
 {
   "name": "rx-executor",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "Encapsulate all the boilerplate code necesary to execute an async operation. Support concurrency executions: MergeMap, SwitchMap, ConcatMap, ExhaustMap. Also a retry mechanisim. All  described is posible via configuration. Based on rxjs. This library can be used in any js environment.",
   "main": "./lib/index.js",
   "types": "./es/index.d.ts",
@@ -29,11 +29,12 @@
     "format": "prettier --write \"src/**/*.{js,html,ts,tsx,jsx}\""
   },
   "peerDependencies": {
-    "rxjs": "^6.0.0"
+    "rxjs": "^6.5.3 || ^7.4.0"
   },
   "peerDependenciesMeta": {},
   "dependencies": {
-    "@babel/runtime": "^7.12.1"
+    "@babel/runtime": "^7.12.1",
+    "object-hash": "^3.0.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.12.1",
@@ -47,6 +48,7 @@
     "@rollup/plugin-commonjs": "^15.1.0",
     "@rollup/plugin-node-resolve": "^9.0.0",
     "@rollup/plugin-replace": "^2.3.3",
+    "@types/object-hash": "^2.2.1",
     "@typescript-eslint/eslint-plugin": "^4.28.0",
     "@typescript-eslint/parser": "^4.28.0",
     "babel-eslint": "^10.1.0",
@@ -63,9 +65,9 @@
     "rimraf": "^3.0.2",
     "rollup": "^2.32.1",
     "rollup-plugin-terser": "^7.0.2",
+    "rxjs": "^6.0.0",
     "ts-jest": "26.5.6",
-    "typescript": "^4.3.4",
-    "rxjs": "^6.0.0"
+    "typescript": "^4.3.4"
   },
   "keywords": [
     "rxjs",
