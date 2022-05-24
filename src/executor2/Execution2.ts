@@ -168,8 +168,14 @@ export type IRxExecuteFn2<P, D> = (params: P) => D | Promise<D> | Observable<D>;
 export class RxExecutor2<P, D> {
   private _status?: ExecutionStatus;
   private _data?: D;
+  private _params?: P;
 
   private _error: any;
+
+  get params() {
+    return this._params;
+  }
+
   get error() {
     return this._error;
   }
@@ -198,7 +204,9 @@ export class RxExecutor2<P, D> {
     return this._status === "FAILED";
   }
 
-  retry(executionId?: string) {}
+  retry() {
+    return this.execute(this._params!);
+  }
 
   private _internalExecution$ = new Subject<Execution2<P, D>>();
 
@@ -206,6 +214,7 @@ export class RxExecutor2<P, D> {
   private operationType: "SWITCH" | "EXHAUST" | "MERGE" | "CONCAT";
   private processorCapacity: number = 1;
   private enableCache: boolean = false;
+  // TODO:
   private concurrentDetailed: boolean = false;
 
   constructor(
@@ -239,7 +248,16 @@ export class RxExecutor2<P, D> {
     this.execute = this.execute.bind(this);
     this.close = this.close.bind(this);
     this.getExecution = this.getExecution.bind(this);
+    this._state$ = this.getState$();
+    console.log("Constructor");
   }
+
+  get state$() {
+    return this._state$;
+  }
+
+  _state$: Observable<IExecutionState<P, D>>;
+
   close() {}
 
   private cachedData: { [key: string]: D } = {};
@@ -274,6 +292,8 @@ export class RxExecutor2<P, D> {
   ) {
     const execution = this._execute(params, config);
     this._execution = execution;
+    this._internalExecution$.next(execution);
+
     return execution;
   }
 
@@ -321,6 +341,7 @@ export class RxExecutor2<P, D> {
           this.operationType === "EXHAUST" ||
           this.operationType === "SWITCH"
         ) {
+          this._params = exec.params;
           this._status = exec.status;
           if (exec.status === "SUCCESS") this._data = exec.data;
           if (exec.status === "FAILED") this._error = exec.error;
@@ -370,7 +391,6 @@ export class RxExecutor2<P, D> {
           this.config.onCancel(exec.params, mergedContext);
       }
     });
-    this._internalExecution$.next(execution);
     return execution;
   }
 
@@ -383,7 +403,15 @@ export class RxExecutor2<P, D> {
     return this.processingExecutions.length >= this.processorCapacity;
   }
 
-  get state$() {
+  getState$() {
+    const mergedExecutions$ =
+      this.config && this.config.params$
+        ? merge(
+            this._internalExecution$,
+            this.config.params$.pipe(map((params) => this._execute(params)))
+          )
+        : this._internalExecution$;
+
     const asyncOperation = getTypeOperation2(this.operationType);
     const waitingSubject = new Subject<Execution2<P, D>>();
     return merge(
@@ -399,7 +427,7 @@ export class RxExecutor2<P, D> {
           return execution.state;
         })
       ),
-      this._internalExecution$.pipe(
+      mergedExecutions$.pipe(
         tap((execution) => {
           waitingSubject.next(execution);
         }),
