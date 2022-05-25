@@ -1,5 +1,5 @@
 import hash from "object-hash";
-import { from, merge, Observable, of, Subject } from "rxjs";
+import { from, iif, merge, Observable, of, Subject, throwError } from "rxjs";
 
 import {
   switchMap,
@@ -11,10 +11,14 @@ import {
   concatMap,
   exhaustMap,
   filter,
+  delay,
+  retryWhen,
 } from "rxjs/operators";
 import { ModuleUtils } from "../exports";
+import { IRetryProcessing, IRxExecutorConfig } from "../model";
 
 type ExecutionStatus =
+  | "RETRYING"
   | "WAITING"
   | "PROCESSING"
   | "SUCCESS"
@@ -71,6 +75,16 @@ export class Execution2<P, D> implements IExecutionState<P, D> {
 
   get state(): IExecutionState<P, D> {
     return this;
+  }
+
+  retrying() {
+    this.status = "RETRYING";
+    this._state$.next(this);
+
+    this.status = "PROCESSING";
+    this._state$.next(this);
+
+    return this.state;
   }
 
   wait() {
@@ -155,12 +169,15 @@ export interface IExecutor<P, D> {
   cache?: boolean;
   cacheLifetimeime?: number;
   context?: { [key: string]: any };
+  onRetry?: (error: any, params: P) => void;
   onWait?: OnWaitType<P>;
   onProcessing?: OnProcessingType<P>;
   onCancel?: OnCancelType<P>;
   onSuccess?: OnSuccessType<P, D>;
   onError?: OnErrorType<P>;
   getId?: (params: P) => string;
+
+  retry?: IRetryProcessing;
 }
 
 export type IRxExecuteFn2<P, D> = (params: P) => D | Promise<D> | Observable<D>;
@@ -249,6 +266,8 @@ export class RxExecutor2<P, D> {
     this.close = this.close.bind(this);
     this.getExecution = this.getExecution.bind(this);
     this._state$ = this.getState$();
+    this.config = config || {};
+
     console.log("Constructor");
   }
 
@@ -284,6 +303,7 @@ export class RxExecutor2<P, D> {
       getId?: (params: P) => string;
       context?: { [key: string]: any };
       onWait?: OnWaitType<P>;
+      onRetry: (error: any, params: P) => void;
       onProcessing?: OnProcessingType<P>;
       onCancel?: OnCancelType<P>;
       onSuccess?: OnSuccessType<P, D>;
@@ -304,6 +324,7 @@ export class RxExecutor2<P, D> {
       getId?: (params: P) => string;
       context?: { [key: string]: any };
       onWait?: OnWaitType<P>;
+      onRetry: (error: any, params: P) => void;
       onProcessing?: OnProcessingType<P>;
       onCancel?: OnCancelType<P>;
       onSuccess?: OnSuccessType<P, D>;
@@ -347,6 +368,14 @@ export class RxExecutor2<P, D> {
           if (exec.status === "FAILED") this._error = exec.error;
         }
       }
+      if (exec.status === "RETRYING") {
+        config && config.onRetry && config.onRetry(exec.error, exec.params);
+
+        this.config &&
+          this.config.onRetry &&
+          this.config.onRetry(exec.error, exec.params);
+      }
+
       if (exec.status === "PROCESSING") {
         config &&
           config.onProcessing &&
@@ -414,7 +443,29 @@ export class RxExecutor2<P, D> {
 
     const asyncOperation = getTypeOperation2(this.operationType);
     const waitingSubject = new Subject<Execution2<P, D>>();
+    const retrySubject = new Subject<Execution2<P, D>>();
+
+    const retryConfig: IRetryProcessing =
+      this.config && this.config.retry
+        ? this.config.retry
+        : {
+            interval: 1000,
+            maxRetryAttempts: 0,
+          };
+    const maxRetryAttempts = retryConfig.maxRetryAttempts
+      ? retryConfig.maxRetryAttempts
+      : 0;
+    const notRetryWhenStatus = retryConfig.notRetryWhenStatus
+      ? retryConfig.notRetryWhenStatus
+      : [];
+
     return merge(
+      retrySubject.pipe(
+        map((execution) => {
+          execution.retrying();
+          return execution.state;
+        })
+      ),
       waitingSubject.pipe(
         filter(() => {
           return (
@@ -484,6 +535,49 @@ export class RxExecutor2<P, D> {
               })
             ),
             loadData$.pipe(
+              /*********************************************************/
+
+              retryWhen((errors) =>
+                errors.pipe(
+                  tap((e) => {
+                    // execution.addError(e);
+                  }),
+                  concatMap((e: any, i) =>
+                    iif(
+                      () => {
+                        if (i < maxRetryAttempts) {
+                          const responseStatus = (e || {}).status || 0;
+                          const notRetry = !!notRetryWhenStatus.find(
+                            (status) => status === responseStatus
+                          );
+                          if (notRetry) {
+                            return true;
+                          }
+                          if (
+                            retryConfig.noRetryWhen &&
+                            retryConfig.noRetryWhen(e)
+                          ) {
+                            return true;
+                          }
+                          return false;
+                        }
+                        return true;
+                      },
+                      throwError(() => e),
+                      of(e).pipe(
+                        tap(() => {
+                          retrySubject.next(execution);
+                        }),
+                        delay(
+                          (retryConfig.typeInterval === "LINEAR" ? 1 : i) *
+                            retryConfig.interval
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              /*********************************************************/
               map((resp) => {
                 execution.succeed(resp);
                 return execution.state;
