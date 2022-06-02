@@ -159,11 +159,11 @@ type OnErrorType<P> = (
 
 export interface IExecutor<P, D> {
   enabledRetry?: boolean;
-  sequential?: "SWITCH" | "EXHAUST";
+  sequential?: "SWITCH" | "EXHAUST" | "MERGE";
   concurrent?: {
     type?: "SWITCH" | "EXHAUST" | "MERGE" | "CONCAT";
     detailed?: boolean;
-    mergeCapacity: 0;
+    mergeCapacity: number;
   };
   params$?: Observable<P>;
   cache?: boolean;
@@ -267,8 +267,6 @@ export class RxExecutor2<P, D> {
     this.getExecution = this.getExecution.bind(this);
     this._state$ = this.getState$();
     this.config = config || {};
-
-    console.log("Constructor");
   }
 
   get state$() {
