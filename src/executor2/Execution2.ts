@@ -482,24 +482,25 @@ export class RxExecutor2<P, D> {
         }),
         asyncOperation((execution) => {
           const { params } = execution;
+
+          let cachedData: D | undefined = undefined;
           if (this.enableCache) {
             const key = hash(params);
-            const data = this.cachedData[key];
-            if (data !== undefined) {
-              execution.succeed(data);
-              return of(execution);
-            }
+            cachedData = this.cachedData[key];
           }
           const executeFn$ = execution.config?.executeFn$ || this.executeFn$;
           const data$ = executeFn$
             ? executeFn$(params)
             : of(params).pipe(map((p: any) => p as D));
 
-          const loadData$: Observable<D> = ModuleUtils.isObservable(data$)
-            ? data$
-            : ModuleUtils.isPromise(data$)
-            ? from(data$)
-            : of(data$);
+          const loadData$: Observable<D> =
+            this.enableCache && cachedData !== undefined
+              ? of(cachedData).pipe(delay(1))
+              : ModuleUtils.isObservable(data$)
+              ? data$
+              : ModuleUtils.isPromise(data$)
+              ? from(data$)
+              : of(data$);
 
           return merge(
             of(execution).pipe(
