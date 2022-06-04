@@ -166,6 +166,9 @@ export interface IExecutor<P, D> {
     mergeCapacity: number;
   };
   params$?: Observable<P>;
+
+  wrapData$?: (data$: Observable<D>) => Observable<D>;
+
   cache?: boolean;
   cacheLifetimeime?: number;
   context?: { [key: string]: any };
@@ -502,6 +505,10 @@ export class RxExecutor2<P, D> {
               ? from(data$)
               : of(data$);
 
+          const wrapData$ = this.config?.wrapData$
+            ? this.config.wrapData$(loadData$)
+            : loadData$;
+
           return merge(
             of(execution).pipe(
               filter(() => {
@@ -533,7 +540,7 @@ export class RxExecutor2<P, D> {
                 return execution.state;
               })
             ),
-            loadData$.pipe(
+            wrapData$.pipe(
               /*********************************************************/
 
               retryWhen((errors) =>
