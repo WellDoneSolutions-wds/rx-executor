@@ -427,7 +427,7 @@ export class RxExecutor2<P, D> {
   private processingExecutions: Execution2<P, D>[] = [];
   private failedExecutions: Execution2<P, D>[] = [];
 
-  invalidCache(params: any) {
+  invalidateCache(params: any) {
     const key = hash(params);
     const found = !!this.cachedData[key];
     delete this.cachedData[key];
