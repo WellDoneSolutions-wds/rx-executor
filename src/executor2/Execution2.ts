@@ -427,7 +427,16 @@ export class RxExecutor2<P, D> {
   private processingExecutions: Execution2<P, D>[] = [];
   private failedExecutions: Execution2<P, D>[] = [];
 
-  invalidCache() {}
+  invalidCache(params: any) {
+    const key = hash(params);
+    const found = !!this.cachedData[key];
+    delete this.cachedData[key];
+    return found;
+  }
+
+  clearCache() {
+    this.cachedData = {};
+  }
 
   isFull(): boolean {
     return this.processingExecutions.length >= this.processorCapacity;
