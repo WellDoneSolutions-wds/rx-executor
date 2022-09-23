@@ -63,13 +63,14 @@ export class Execution2<P, D> implements IExecutionState<P, D> {
       executeFn$?: IRxExecuteFn2<P, D>;
       cache?: boolean;
       getId?: (params: P) => string;
+      ignoreCache?: boolean;
     }
   ) {
     const conf = config || {
       cache: false,
       getId: (params) => generateUniqSerial(),
     };
-    this.hashedParams = conf.cache ? hash(params) : undefined;
+    this.hashedParams = conf.cache ? hash(params as any) : undefined;
     this.id = conf.getId ? conf.getId(params) : generateUniqSerial();
   }
 
@@ -309,6 +310,7 @@ export class RxExecutor2<P, D> {
       onCancel?: OnCancelType<P>;
       onSuccess?: OnSuccessType<P, D>;
       onError?: OnErrorType<P>;
+      ignoreCache?: boolean;
     }
   ) {
     const execution = this._execute(params, config);
@@ -330,6 +332,7 @@ export class RxExecutor2<P, D> {
       onCancel?: OnCancelType<P>;
       onSuccess?: OnSuccessType<P, D>;
       onError?: OnErrorType<P>;
+      ignoreCache?: boolean;
     }
   ) {
     const context = (config ? config.context : {}) || {};
@@ -351,9 +354,13 @@ export class RxExecutor2<P, D> {
       executeFn$: config?.executeFn$,
       cache: this.config?.cache,
       getId: this.config?.getId,
+      ignoreCache: config?.ignoreCache,
     });
-    if (this.enableCache) {
-      const key = hash(params);
+
+    const ignoreCache = config?.ignoreCache || false;
+    const enableCache = this.enableCache && !ignoreCache;
+    if (enableCache) {
+      const key = hash(params as any);
       this.cachedExecution[key] = execution;
     }
 
@@ -494,10 +501,13 @@ export class RxExecutor2<P, D> {
         }),
         asyncOperation((execution) => {
           const { params } = execution;
+          const ignoreCache = execution.config?.ignoreCache || false;
+
+          const enableCache = this.enableCache && !ignoreCache;
 
           let cachedData: D | undefined = undefined;
-          if (this.enableCache) {
-            const key = hash(params);
+          if (enableCache) {
+            const key = hash(params as any);
             cachedData = this.cachedData[key];
           }
           const executeFn$ = execution.config?.executeFn$ || this.executeFn$;
@@ -506,7 +516,7 @@ export class RxExecutor2<P, D> {
             : of(params).pipe(map((p: any) => p as D));
 
           const loadData$: Observable<D> =
-            this.enableCache && cachedData !== undefined
+            enableCache && cachedData !== undefined
               ? of(cachedData).pipe(delay(1))
               : ModuleUtils.isObservable(data$)
               ? data$
