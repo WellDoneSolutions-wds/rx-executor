@@ -2,20 +2,20 @@ import hash from "object-hash";
 import { from, iif, merge, Observable, of, Subject, throwError } from "rxjs";
 
 import {
-  switchMap,
-  tap,
-  shareReplay,
-  mergeMap,
-  map,
   catchError,
   concatMap,
+  delay,
   exhaustMap,
   filter,
-  delay,
+  map,
+  mergeMap,
   retryWhen,
+  shareReplay,
+  switchMap,
+  tap,
 } from "rxjs/operators";
 import { ModuleUtils } from "../exports";
-import { IRetryProcessing, IRxExecutorConfig } from "../model";
+import { IRetryProcessing } from "../model";
 
 type ExecutionStatus =
   | "RETRYING"
@@ -68,7 +68,7 @@ export class Execution2<P, D> implements IExecutionState<P, D> {
   ) {
     const conf = config || {
       cache: false,
-      getId: (params) => generateUniqSerial(),
+      getId: () => generateUniqSerial(),
     };
     this.hashedParams = conf.cache ? hash(params as any) : undefined;
     this.id = conf.getId ? conf.getId(params) : generateUniqSerial();
